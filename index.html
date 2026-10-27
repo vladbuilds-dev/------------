@@ -39,6 +39,12 @@ h1 span{color:var(--red);font-style:italic}
 .heart-mark{font-size:22px;color:#d9b56d}
 .stamp{position:absolute;top:92px;right:17px;border:3px double var(--gold);color:#f0d7a0;padding:8px 11px;transform:rotate(12deg);font-family:'Cormorant Garamond',serif;font-weight:700;font-size:14px;letter-spacing:.1em;opacity:0;transition:.15s;z-index:3}
 .stamp.show{opacity:1}
+.finale{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:flex-end;gap:18px;padding:34px 26px 30px;text-align:center;background:linear-gradient(145deg,#4a3026,#171210);isolation:isolate}
+.finale.show{display:flex}
+.finale img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.finale:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,14,11,0) 35%,rgba(20,14,11,.92) 100%);z-index:-1}
+.finale-text{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:clamp(40px,6vw,62px);line-height:.95;color:#fff6e7;transform:rotate(-2deg)}
+.finale .finale-btn{color:#f4d99c;border-color:rgba(222,189,120,.7)}.finale .finale-btn:hover{background:rgba(255,255,255,.08)}
 .deck-actions{display:flex;justify-content:center;align-items:center;gap:16px;margin:22px 0 0}
 .action{border:1px solid var(--line);border-radius:50px;padding:13px 21px;min-width:144px;display:flex;align-items:center;justify-content:center;gap:9px;font-weight:800;font-size:11px;letter-spacing:.12em;transition:.2s;box-shadow:0 5px 0 rgba(40,20,10,.06)}
 .action:hover{transform:translateY(-3px);box-shadow:0 8px 0 rgba(40,20,10,.07)}
@@ -102,6 +108,7 @@ h1 span{color:var(--red);font-style:italic}
         <img class="portrait" id="portrait" alt="Портрет правителя">
         <div class="card-top"><div class="seal">✦ Особа государева</div><div class="card-count" id="cardCount">01 / 06</div></div>
         <div class="stamp" id="stamp">ЛЮБО!</div>
+        <div class="finale" id="finale"><img id="finaleImg" alt=""><div class="finale-text">Ты уже надоел блин!</div><button class="secondary finale-btn" id="restartBtn">↺ Листать заново</button></div>
         <div class="card-content">
           <div class="royal-line" id="role">Государь всея Руси</div>
           <h2 class="person-name" id="name">Иван Грозный</h2>
@@ -285,6 +292,7 @@ let passes = load("rus_match_passes", []);
   if (base && /wikimedia\.org/.test(p.image || "")) p.image = base.image;
 }));
 const imgSrc = src => PORTRAITS[src] || src || "";
+let finished = false; // показан ли финальный экран после последней анкеты
 let index = 0, history = [], editingIndex = 0, toastTimer;
 const $ = id => document.getElementById(id);
 function load(key, fallback){try{const x=localStorage.getItem(key);return x?JSON.parse(x):JSON.parse(JSON.stringify(fallback))}catch(e){return JSON.parse(JSON.stringify(fallback))}}
@@ -299,13 +307,14 @@ function render(){
  $("portrait").src=imgSrc(p.image);$("portrait").onerror=()=>{$("portrait").style.display="none";$("profileCard").style.background="linear-gradient(145deg,#4a3026,#171210)"};$("portrait").onload=()=>{$("portrait").style.display="block";$("profileCard").style.background="#211b17"};
  $("likedCount").textContent=likes.length;$("passedCount").textContent=passes.length;
  $("stamp").classList.remove("show");$("stamp").textContent="ЛЮБО!";
+ $("finale").classList.toggle("show",finished);if(finished&&PORTRAITS.finale)$("finaleImg").src=PORTRAITS.finale;$("finaleImg").style.display=PORTRAITS.finale?"block":"none";
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function vote(like){
- if(!profiles.length)return;const p=current();history.push({index,likes:likes.slice(),passes:passes.slice()});
+ if(!profiles.length||finished)return;const p=current();history.push({index,likes:likes.slice(),passes:passes.slice()});
  const list=like?likes:passes;if(!list.some(x=>x.name===p.name)){list.push({name:p.name,role:p.role,meta:p.meta,image:p.image})}
  $("stamp").textContent=like?"ЛЮБО!":"НЕ ЛЮБО";$("stamp").style.color=like?"#f0d7a0":"#f2b3a9";$("stamp").classList.add("show");
- save();setTimeout(()=>{index=(index+1)%profiles.length;render();if(like)showToast("✦ Записано в сердечную летопись: "+p.name);},240);
+ save();setTimeout(()=>{if(index>=profiles.length-1)finished=true;else index++;render();if(like)showToast("✦ Записано в сердечную летопись: "+p.name);},240);
 }
 function openEdit(add=false){
  if(add){editingIndex=-1;$("editForm").reset();$("fName").value="";$("fRole").value="Правитель Руси";$("fMeta").value="";$("fMotto").value="«Сердцу не прикажешь»";$("fBio").value="";$("fQuote").value="";$("fTags").value="";$("fImage").value="";$("fImage").placeholder="https://…"}
@@ -314,11 +323,13 @@ function openEdit(add=false){
 }
 $("editBtn").onclick=()=>openEdit(false);$("addBtn").onclick=()=>openEdit(true);
 $("editForm").addEventListener("submit",e=>{e.preventDefault();const p={name:$("fName").value.trim(),role:$("fRole").value.trim(),meta:$("fMeta").value.trim(),motto:$("fMotto").value.trim(),bio:$("fBio").value.trim(),seeking:$("fSeeking").value.trim(),dateIdea:$("fDateIdea").value.trim(),quote:$("fQuote").value.trim(),tags:$("fTags").value.split(",").map(x=>x.trim()).filter(Boolean),image:$("fImage").value.trim()||(editingIndex>=0&&PORTRAITS[profiles[editingIndex].image]?profiles[editingIndex].image:"")};
+ finished=false;
  if(editingIndex===-1){profiles.push(p);index=profiles.length-1;showToast("Новая анкета внесена в летопись ✦")}else{profiles[editingIndex]=p;showToast("Летопись исправлена ✦")}
  save();$("editModal").classList.remove("open");render()});
 $("noBtn").onclick=()=>vote(false);$("yesBtn").onclick=()=>vote(true);
-$("undoBtn").onclick=()=>{if(history.length){const h=history.pop();index=Math.min(h.index,profiles.length-1);likes=h.likes;passes=h.passes;save();render();showToast("Голос отменён, анкета возвращена")}else showToast("Пока нечего возвращать")};
-$("restoreBtn").onclick=()=>{if(confirm("Вернуть исходные анкеты? Все правки и добавленные правители будут удалены.")){profiles=JSON.parse(JSON.stringify(initialProfiles));index=0;history=[];save();render();$("editModal").classList.remove("open");showToast("Летопись возвращена к исходной ✦")}};
+$("undoBtn").onclick=()=>{if(history.length){const h=history.pop();finished=false;index=Math.min(h.index,profiles.length-1);likes=h.likes;passes=h.passes;save();render();showToast("Голос отменён, анкета возвращена")}else showToast("Пока нечего возвращать")};
+$("restartBtn").onclick=()=>{finished=false;index=0;history=[];render()};
+$("restoreBtn").onclick=()=>{if(confirm("Вернуть исходные анкеты? Все правки и добавленные правители будут удалены.")){profiles=JSON.parse(JSON.stringify(initialProfiles));index=0;history=[];finished=false;save();render();$("editModal").classList.remove("open");showToast("Летопись возвращена к исходной ✦")}};
 $("matchesBtn").onclick=()=>{const list=$("matchesList");list.innerHTML=likes.length?likes.map(p=>`<div class="match-row"><img src="${escapeHtml(imgSrc(p.image))}" onerror="this.style.visibility='hidden'" alt=""><div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.role||"Особа государева")} · ${escapeHtml(p.meta||"")}</small></div></div>`).join(""):'<div class="empty">Пока ни одного «ЛЮБО». Время прислушаться к сердцу.</div>';$("matchesModal").classList.add("open")};
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).classList.remove("open"));
 document.querySelectorAll(".modal-backdrop").forEach(b=>b.addEventListener("click",e=>{if(e.target===b)b.classList.remove("open")}));
